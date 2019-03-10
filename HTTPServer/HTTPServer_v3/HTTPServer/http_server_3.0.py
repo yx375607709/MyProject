@@ -9,12 +9,11 @@
 HTTP Server v3.0
 '''
 
-from socket import *
 from threading import Thread
 import sys
-from config import *
-import json
 # 导入配置信息
+from HTTPServer_v3.Web_Frame.web_frame import *
+from HTTPServer_v3.HTTPServer.config import *
 
 # 向frame发送请求
 def connect_frame(**kwargs):
@@ -24,10 +23,12 @@ def connect_frame(**kwargs):
     except Exception as e:
         print(e)
         return
-    # 将请求发送给frame
-    s.send(json.dumps(kwargs).encode('utf-8'))
-    data = s.recv(4096)
+    s.send(json.dumps(kwargs).encode())
+    data = s.recv(4096).decode()
     return data
+
+
+
 
 
 # 封装具体的类作为HTTP Server功能模块
@@ -35,7 +36,7 @@ class HTTPServer(object):
     def __init__(self):
         # self.addr = addr
         self.create_socket()
-        self.bind()
+        self.bind(ADDR)
         self.server_forever()
 
     # 创建套接字
@@ -44,16 +45,16 @@ class HTTPServer(object):
         # 设置端口重用
         self.sock_fd.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
 
-    # 绑定地址
-    def bind(self):
-        self.sock_fd.bind(ADDR)
-        print('Listen %s ...' % ADDR[1])
+    def bind(self,address):
+        self.ip = address[0]
+        self.port = address[1]
+        self.sock_fd.bind(address)
 
     # 启动服务
     def server_forever(self):
         while True:
             # 开始监听客户端
-            self.sock_fd.listen(5)
+            self.sock_fd.listen(10)
             try:
                 conn, add = self.sock_fd.accept()
             except KeyboardInterrupt:
@@ -70,14 +71,13 @@ class HTTPServer(object):
     def handle(self, conn):
         request = conn.recv(4096)
         # 处理客户端断开
-        if not request:
+        if not request or request[0] == 'Q':
             conn.close()
             return
+
         # 处理客户端请求
-        # print(request)
         request_lines = request.splitlines()
         request_line = request_lines[0].decode('utf-8')
-        # print('请求:', request_line)
         tmp = request_line.split(' ')
         method = tmp[0]
         path_info = tmp[1]
@@ -86,17 +86,16 @@ class HTTPServer(object):
 
     # 给客户端返回响应{status:200, data:xxxxxx}
     def response(self, data, conn):
-        data = json.loads(data)
         # 根据情况组织响应
-        if data['status'] == '200':
+        if data == '200':
             response_headers = 'HTTP/1.1 200 OK\r\n'
-        elif data['status'] == '404':
+        elif data == '404':
             response_headers = 'HTTP/1.1 404 Not Found\r\n'
         else:
             response_headers = 'HTTP/1.1 888 Unknown Error\r\n'
         response_headers += '\r\n'
-        response_body = data['data']
-        response = response_headers + response_body
+        response_body = data
+        response = (response_headers + response_body).encode('utf-8')
         conn.send(response)
         conn.close()
 
@@ -104,5 +103,7 @@ class HTTPServer(object):
 
 
 if __name__ == '__main__':
-   httpd = HTTPServer()
-   httpd.server_forever() # 启动服务程序
+    # app = Application()
+    # app.start()
+    httpd = HTTPServer()
+    httpd.server_forever() # 启动服务程序
